@@ -1,0 +1,58 @@
+name:                either-directory
+version:             0.1.0.0
+-- description:         
+license:             BSD3
+license-file:        LICENSE
+author:              João Cristóvão
+maintainer:          jmacristovao@gmail.com
+category:            System
+build-type:          Simple
+
+-- Extra files to be distributed with the package, such as examples or a 
+-- README.
+-- extra-source-files:  
+
+-- Constraint on the version of Cabal needed to build this package.
+cabal-version:       >=1.10
+
+
+library
+  -- Modules exported by the library.
+  exposed-modules:     System.Directory.Either
+  
+  -- Modules included in this library but not exported.
+  -- other-modules:       
+  
+  -- LANGUAGE extensions used by modules in this package.
+  other-extensions:    FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, ScopedTypeVariables, FunctionalDependencies, OverlappingInstances, UndecidableInstances, TemplateHaskell
+  
+  -- Other library packages from which modules are imported.
+  build-depends:      base >=4.6 
+                    , directory >=1.2 
+                    , http-conduit >=2.0 
+                    , transformers >=0.3 
+                    , either >=4.1 
+                    , errors >=1.4 
+                    , template-haskell >=2.8 
+                    , text >=0.11 
+  
+  -- Directories containing source files.
+  hs-source-dirs:      src
+  ghc-options:      -Wall -ddump-splices
+  
+  -- Base language which the package is written in.
+  default-language:    Haskell2010
+  
+executable main
+  main-is: main.hs
+  hs-source-dirs:   src
+  ghc-options:      -Wall -ddump-splices
+  build-depends:      base >=4.6 
+                    , directory >=1.2 
+                    , http-conduit >=2.0 
+                    , transformers >=0.3 
+                    , either >=4.1 
+                    , errors >=1.4 
+                    , template-haskell >=2.8 
+                    , text >=0.11 
+  default-language:    Haskell2010

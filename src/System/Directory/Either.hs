@@ -5,97 +5,20 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes #-}
 module System.Directory.Either where
 
 import qualified System.Directory as D
 import Network.HTTP.Conduit
+{-import Control.Monad-}
 import Control.Exception
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Class
-import Control.Error.Util
-import Control.Applicative
+{-import Control.Applicative-}
+import Language.Haskell.TH
 import Data.Text (Text)
 import qualified Data.Text as T
-
-ioExcept :: IOException
-ioExcept = undefined
-
-class ErrorsToCatch errs a where
-  handlerList :: errs -> [Handler a]
-
-instance ErrorsToCatch IOException String where
-  handlerList _ = [Handler (\(e::IOException) -> return . show $ e)]
-
-instance ErrorsToCatch IOException Text where
-  handlerList _ = [Handler (\(e::IOException) -> return . T.pack . show $ e)]
-
-instance ErrorsToCatch IOException IOException where
-  handlerList _ = [Handler (\(e::IOException) -> return e)]
-
-instance ErrorsToCatch IOException () where
-  handlerList _ = [Handler (\(e::IOException) -> return ())]
-
-instance ErrorsToCatch (IOException, HttpException) Text where
-  handlerList _ = [ Handler (\(e::IOException) -> return . T.pack . show $ e)
-                , Handler (\(e::HttpException)->return . T.pack . show $ e)
-                ]
-
-class Tries a b c | c -> a b where
-{-class Tries a b c | a b -> c where-}
-{-class Tries a b c where-}
-  tries :: [Handler a] -> IO b -> IO c
-
-instance Tries a b (Either a b) where
-  tries handlers io = fmap Right io
-              `catch` catchesHandler handlers
-
-instance Tries a b (Maybe b) where
-  tries handlers io = fmap Just io
-             `catch` (fmap eitherToMaybe . catchesHandler handlers)
-
-{-instance Tries a () (Maybe ()) where-}
-  {-tries handlers io = fmap Just io-}
-             {-`catch` (fmap eitherToMaybe . catchesHandler handlers)-}
-
-
-catchesHandler :: [Handler a] -> SomeException -> IO (Either a b)
-catchesHandler handlers e = foldr tryHandler (throw e) handlers
-    where tryHandler (Handler handler) res =
-            case fromException e of
-              Just e' -> fmap Left (handler e')
-              Nothing -> res
-
-
-{-io :: IO b -> EitherT String IO (Either String b)-}
-{-io :: (MonadTrans t) => (Either e a -> b) -> IO a -> t IO b-}
-{-io :: (Functor (t IO), MonadTrans t, ErrorsToCatch IOException a) => (Either a c -> b) -> IO c -> t IO b-}
-{-io f = fmap f . lift . tries (handlerList ioExcept)-}
-
--- class SystemDirectory e where e IO () ?
-class SystemDirectoryET e where
-  createDirectory :: FilePath -> e IO ()
-
-{-createDirectory' = io . D.createDirectory-}
-handlerListIoUnit = handlerList ioExcept :: [Handler ()]
-
-instance SystemDirectoryET (EitherT String) where
-  createDirectory fp = (liftIO $ tries (handlerList ioExcept) (D.createDirectory fp)) >>= hoistEither
-
-instance SystemDirectoryET MaybeT where
-  createDirectory fp = (liftIO $ tries handlerListIoUnit (D.createDirectory fp)) >>= hoistMaybe
-
-    {-hushT $ (createDirectory :: FilePath -> EitherT String IO ())  fp-}
-    {-liftIO . tries (handlerList (undefined::IOException)) . D.createDirectory § fp >>= hoistMaybe-}
-
-
-main = do
-  _ <- runMaybeT $ createDirectory "abc"
-  print "OK"
-
-{-tries :: [Handler a] -> IO b -> IO (Either a b)-}
-{-tries handlers io = fmap Right io `catch` catchesHandler handlers-}
 
 -- | Just like (@'$'@), but with higher precedence than (@'<>'@), but still lower
 -- than (@'.'@). Similar to "Diagrams.Util" @'#'@, but without flipped arguments.
@@ -103,13 +26,6 @@ main = do
 (§) :: (a -> b) -> a -> b
 f § x =  f x
 infixr 8 §
-
--- | Transform a either value encapsulated in a @Monad m@ into the equivalent
--- MaybeT m monad transformer.
---
--- /Note/: The left value is silently discarded.
-mEitherToMaybeT :: (Functor m) => m (Either a b) -> MaybeT m b
-mEitherToMaybeT eF = MaybeT (eitherToMaybe <$> eF)
 
 -- | Convert an Either value to a Maybe value
 --
@@ -123,7 +39,91 @@ mEitherToMaybeT eF = MaybeT (eitherToMaybe <$> eF)
 eitherToMaybe :: Either a b -> Maybe b
 eitherToMaybe = either (const Nothing) Just
 
-eitherToMaybe' :: Either a () -> Maybe ()
-eitherToMaybe' = either (const Nothing) (const (Just ()))
+ioExcept :: IOException
+ioExcept = undefined
+
+class HandlerList errs a where
+  handlerList :: errs -> [Handler a]
+
+instance HandlerList IOException String where
+  handlerList _ = [Handler (\(e::IOException) -> return . show $ e)]
+
+instance HandlerList IOException Text where
+  handlerList _ = [Handler (\(e::IOException) -> return . T.pack . show $ e)]
+
+instance HandlerList IOException IOException where
+  handlerList _ = [Handler (\(e::IOException) -> return e)]
+
+instance HandlerList IOException () where
+  handlerList _ = [Handler (\(_::IOException) -> return ())]
+
+instance HandlerList (IOException, HttpException) Text where
+  handlerList _ = [ Handler (\(e::IOException) -> return . T.pack . show $ e)
+                , Handler (\(e::HttpException)->return . T.pack . show $ e)
+                ]
+
+-- One possibility is to define it for MaybeT, and leave it open
+-- to EitherT. Does it make sense to define it also for ListT?
+-- But then [] would mean failure, wouldn't it?
+-- [()] success?
+handlerListIoUnit :: [Handler ()]
+handlerListIoUnit = handlerList ioExcept
+
+class Tries a b c | c -> a b where
+  tries :: [Handler a] -> IO b -> IO c
+
+instance Tries a b (Either a b) where
+  tries handlers io = fmap Right io
+              `catch` catchesHandler handlers
+
+instance Tries a b (Maybe b) where
+  tries handlers io = fmap Just io
+             `catch` (fmap eitherToMaybe . catchesHandler handlers)
+
+catchesHandler :: [Handler a] -> SomeException -> IO (Either a b)
+catchesHandler handlers e = foldr tryHandler (throw e) handlers
+    where tryHandler (Handler handler) res =
+            case fromException e of
+              Just e' -> fmap Left (handler e')
+              Nothing -> res
+
+class ToT n t m a | n -> t, t -> n where
+  toT :: m (n a) -> t m a
+
+instance ToT Maybe MaybeT IO a where
+  toT = MaybeT
+
+instance ToT (Either b) (EitherT b) IO a where
+  toT = EitherT
+
+class IOT t m a where
+  ioT :: m a -> t m a
+
+instance IOT MaybeT IO a where
+  ioT iof = toT $ tries handlerListIoUnit iof
+
+instance IOT (EitherT String) IO a where
+  ioT iof = toT $ tries (handlerList ioExcept) iof
+
+instance IOT (EitherT Text) IO a where
+  ioT iof = toT $ tries (handlerList ioExcept) iof
+
+instance IOT (EitherT ()) IO a where
+  ioT iof = toT $ tries (handlerList ioExcept) iof
+
+instance IOT (EitherT IOException) IO a where
+  ioT iof = toT $ tries (handlerList ioExcept) iof
+
+-- class SystemDirectory e where e IO () ?
+class SystemDirectory e where
+  createDirectory :: FilePath -> e IO ()
+
+deriveSystemDirectory :: Name -> DecsQ
+deriveSystemDirectory tp = let
+    nm = conT tp
+  in [d|
+    instance SystemDirectory $nm where
+      createDirectory fp = ioT $ D.createDirectory fp
+  |]
 
 
