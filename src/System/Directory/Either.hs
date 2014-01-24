@@ -7,9 +7,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
-module System.Directory.Either where
+module System.Directory.Either (
+    HandlerList (..)
+  , SystemDirectory (..)
+  , Permissions (..)
+  , deriveSystemDirectoryUnit
+  , deriveSystemDirectory
+) where
 
 import qualified System.Directory as D
+import System.Directory (Permissions(..))
+import Data.Time.Clock
 import Network.HTTP.Conduit
 {-import Control.Monad-}
 import Control.Exception
@@ -20,12 +28,8 @@ import Language.Haskell.TH
 import Data.Text (Text)
 import qualified Data.Text as T
 
--- | Just like (@'$'@), but with higher precedence than (@'<>'@), but still lower
--- than (@'.'@). Similar to "Diagrams.Util" @'#'@, but without flipped arguments.
-{-# INLINE (§) #-}
-(§) :: (a -> b) -> a -> b
-f § x =  f x
-infixr 8 §
+(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
+(.:) = (.).(.)
 
 -- | Convert an Either value to a Maybe value
 --
@@ -99,31 +103,107 @@ instance ToT (Either b) (EitherT b) IO a where
 class IOT t m a where
   ioT :: m a -> t m a
 
-instance IOT MaybeT IO a where
-  ioT iof = toT $ tries handlerListIoUnit iof
-
-instance IOT (EitherT String) IO a where
-  ioT iof = toT $ tries (handlerList ioExcept) iof
-
-instance IOT (EitherT Text) IO a where
-  ioT iof = toT $ tries (handlerList ioExcept) iof
-
-instance IOT (EitherT ()) IO a where
-  ioT iof = toT $ tries (handlerList ioExcept) iof
-
-instance IOT (EitherT IOException) IO a where
-  ioT iof = toT $ tries (handlerList ioExcept) iof
-
--- class SystemDirectory e where e IO () ?
+-- | System.Directory as a Class.
+-- Instances for MaybeT and EitherT (String|Text|IOException|())
 class SystemDirectory e where
-  createDirectory :: FilePath -> e IO ()
+  createDirectory             :: FilePath -> e IO ()
+  createDirectoryIfMissing    :: Bool -> FilePath -> e IO ()
+  removeDirectory             :: FilePath -> e IO ()
+  removeDirectoryRecursive    :: FilePath -> e IO ()
+  renameDirectory             :: FilePath -> FilePath -> e IO ()
+  getDirectoryContents        :: FilePath -> e IO [FilePath]
+  getCurrentDirectory         :: e IO FilePath
+  setCurrentDirectory         :: FilePath -> e IO ()
+  getHomeDirectory            :: e IO FilePath
+  getAppUserDataDirectory     :: String -> e IO FilePath
+  getUserDocumentsDirectory   :: e IO FilePath
+  getTemporaryDirectory       :: e IO FilePath
+  removeFile                  :: FilePath -> e IO ()
+  renameFile                  :: FilePath -> FilePath -> e IO ()
+  copyFile                    :: FilePath -> FilePath -> e IO ()
+  canonicalizePath            :: FilePath -> e IO FilePath
+  makeRelativeToCurrentDirectory :: FilePath -> e IO FilePath
+  -- this may deserve a special case...
+  findExecutable              :: String -> e IO (Maybe FilePath)
+  findFile                    :: [FilePath] -> String -> e IO (Maybe FilePath)
+  doesFileExist               :: FilePath -> e IO Bool
+  doesDirectoryExist          :: FilePath -> e IO Bool
+  getPermissions              :: FilePath -> e IO Permissions
+  setPermissions              :: FilePath -> Permissions -> e IO ()
+  copyPermissions             :: FilePath -> FilePath -> e IO ()
+  getModificationTime         :: FilePath -> e IO UTCTime
+
 
 deriveSystemDirectory :: Name -> DecsQ
 deriveSystemDirectory tp = let
     nm = conT tp
   in [d|
+
+    instance IOT $nm IO a where
+      ioT iof = toT $ tries (handlerList ioExcept) iof
+
     instance SystemDirectory $nm where
-      createDirectory fp = ioT $ D.createDirectory fp
+      createDirectory            = ioT .  D.createDirectory
+      createDirectoryIfMissing   = ioT .: D.createDirectoryIfMissing
+      removeDirectory            = ioT .  D.removeDirectory
+      removeDirectoryRecursive   = ioT .  D.removeDirectoryRecursive
+      renameDirectory orig       = ioT .  D.renameDirectory orig
+      getDirectoryContents       = ioT .  D.getDirectoryContents
+      getCurrentDirectory        = ioT    D.getCurrentDirectory
+      setCurrentDirectory        = ioT .  D.setCurrentDirectory
+      getHomeDirectory           = ioT    D.getHomeDirectory
+      getAppUserDataDirectory    = ioT .  D.getAppUserDataDirectory
+      getUserDocumentsDirectory  = ioT    D.getUserDocumentsDirectory
+      getTemporaryDirectory      = ioT    D.getTemporaryDirectory
+      removeFile                 = ioT .  D.removeFile
+      renameFile                 = ioT .: D.renameFile
+      copyFile                   = ioT .: D.copyFile
+      canonicalizePath           = ioT .  D.canonicalizePath
+      makeRelativeToCurrentDirectory = ioT . D.makeRelativeToCurrentDirectory
+      findExecutable             = ioT .  D.findExecutable
+      findFile                   = ioT .: D.findFile
+      doesFileExist              = ioT .  D.doesFileExist
+      doesDirectoryExist         = ioT .  D.doesDirectoryExist
+      getPermissions             = ioT .  D.getPermissions
+      setPermissions             = ioT .: D.setPermissions
+      copyPermissions            = ioT .: D.copyPermissions
+      getModificationTime        = ioT .  D.getModificationTime
+  |]
+
+deriveSystemDirectoryUnit :: Name -> DecsQ
+deriveSystemDirectoryUnit tp = let
+    nm = conT tp
+  in [d|
+    instance IOT $nm IO a where
+      ioT iof = toT $ tries handlerListIoUnit iof
+
+
+    instance SystemDirectory $nm where
+      createDirectory            = ioT .  D.createDirectory
+      createDirectoryIfMissing   = ioT .: D.createDirectoryIfMissing
+      removeDirectory            = ioT .  D.removeDirectory
+      removeDirectoryRecursive   = ioT .  D.removeDirectoryRecursive
+      renameDirectory orig       = ioT .  D.renameDirectory orig
+      getDirectoryContents       = ioT .  D.getDirectoryContents
+      getCurrentDirectory        = ioT    D.getCurrentDirectory
+      setCurrentDirectory        = ioT .  D.setCurrentDirectory
+      getHomeDirectory           = ioT    D.getHomeDirectory
+      getAppUserDataDirectory    = ioT .  D.getAppUserDataDirectory
+      getUserDocumentsDirectory  = ioT    D.getUserDocumentsDirectory
+      getTemporaryDirectory      = ioT    D.getTemporaryDirectory
+      removeFile                 = ioT .  D.removeFile
+      renameFile                 = ioT .: D.renameFile
+      copyFile                   = ioT .: D.copyFile
+      canonicalizePath           = ioT .  D.canonicalizePath
+      makeRelativeToCurrentDirectory = ioT . D.makeRelativeToCurrentDirectory
+      findExecutable             = ioT .  D.findExecutable
+      findFile                   = ioT .: D.findFile
+      doesFileExist              = ioT .  D.doesFileExist
+      doesDirectoryExist         = ioT .  D.doesDirectoryExist
+      getPermissions             = ioT .  D.getPermissions
+      setPermissions             = ioT .: D.setPermissions
+      copyPermissions            = ioT .: D.copyPermissions
+      getModificationTime        = ioT .  D.getModificationTime
   |]
 
 

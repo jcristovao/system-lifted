@@ -29,6 +29,7 @@ library
   -- Other library packages from which modules are imported.
   build-depends:      base >=4.6 
                     , directory >=1.2 
+                    , time >= 1.4.0
                     , http-conduit >=2.0 
                     , transformers >=0.3 
                     , either >=4.1 
@@ -38,7 +39,7 @@ library
   
   -- Directories containing source files.
   hs-source-dirs:      src
-  ghc-options:      -Wall -ddump-splices
+  ghc-options:      -Wall 
   
   -- Base language which the package is written in.
   default-language:    Haskell2010
@@ -46,9 +47,10 @@ library
 executable main
   main-is: main.hs
   hs-source-dirs:   src
-  ghc-options:      -Wall -ddump-splices
+  ghc-options:      -Wall
   build-depends:      base >=4.6 
                     , directory >=1.2 
+                    , time >= 1.4.0
                     , http-conduit >=2.0 
                     , transformers >=0.3 
                     , either >=4.1 
