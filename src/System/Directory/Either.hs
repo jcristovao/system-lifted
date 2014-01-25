@@ -6,27 +6,43 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE QuasiQuotes #-}
 module System.Directory.Either (
     HandlerList (..)
   , SystemDirectory (..)
   , Permissions (..)
-  , deriveSystemDirectoryUnit
   , deriveSystemDirectory
+  , deriveSystemDirectoryUnit
+  , deriveSystemDirectoryErrors
+  , deriveSystemDirectoryErrorsUnit
+  , IOExceptionHandling (..)
+  , xpto
 ) where
+
+import Data.Text (Text)
+import qualified Data.Text as T
 
 import qualified System.Directory as D
 import System.Directory (Permissions(..))
 import Data.Time.Clock
+
 import Network.HTTP.Conduit
-{-import Control.Monad-}
-import Control.Exception
+
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Maybe
-{-import Control.Applicative-}
+import Control.Monad.Trans.Identity
+
+import Data.Functor.Identity
+
+import Data.Typeable
+import GHC.IO.Exception
+import System.IO.Error
+import Control.Exception
+
 import Language.Haskell.TH
-import Data.Text (Text)
-import qualified Data.Text as T
+import Language.Haskell.Meta.Parse
 
 (.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
 (.:) = (.).(.)
@@ -46,20 +62,56 @@ eitherToMaybe = either (const Nothing) Just
 ioExcept :: IOException
 ioExcept = undefined
 
+data IOExceptionHandling = AllowIOE    [IOErrorType]
+                         | DisallowIOE [IOErrorType]
+                         | AllIOE
+                         deriving (Eq,Typeable)
+
+instance Show IOExceptionHandling where
+  show (AllowIOE  _)   = "AllIOE"
+  show (DisallowIOE _) = "DisallowIOE"
+  show AllIOE          = "AllIOE"
+
+
+xpto :: IOExceptionHandling
+xpto = DisallowIOE [AlreadyExists]
+
+processIOExcepts :: IOExceptionHandling -> IOException -> IOException
+processIOExcepts ioeh ioe =
+  case ioeh of
+    -- | Provided a list of IOExceptions to allow (reported as Left or Nothing),
+    -- throw a IOException if not in this list (White Listing).
+    AllowIOE lst -> if ioeGetErrorType ioe `elem` lst
+                      then ioe
+                      else throw ioe
+
+    -- | Provided a list of IOExceptions to forbid, rethrow a IOException if
+    -- mentioned in this list (Black Listing).
+    DisallowIOE lst -> if ioeGetErrorType ioe `elem` lst
+                      then throw ioe
+                      else ioe
+
+    -- | No exception filtering done, all reported as Left or Nothing
+    AllIOE -> ioe
+
+-- | Do not rethrow any IO Exception
+{-allowIOExcepts :: [IOErrorType] -> IOException -> IOException-}
+{-allowIOExcepts _ ioe = ioe-}
+
 class HandlerList errs a where
   handlerList :: errs -> [Handler a]
 
-instance HandlerList IOException String where
-  handlerList _ = [Handler (\(e::IOException) -> return . show $ e)]
+instance HandlerList (IOException -> IOException) String where
+  handlerList f = [Handler (\(e::IOException) -> return . show . f $ e)]
 
-instance HandlerList IOException Text where
-  handlerList _ = [Handler (\(e::IOException) -> return . T.pack . show $ e)]
+instance HandlerList (IOException -> IOException) () where
+  handlerList f = [Handler (\(e::IOException) -> evaluate (f e) >> return ())]
 
-instance HandlerList IOException IOException where
-  handlerList _ = [Handler (\(e::IOException) -> return e)]
+instance HandlerList (IOException -> IOException) Text where
+  handlerList f = [Handler (\(e::IOException) -> return . T.pack . show . f $ e)]
 
-instance HandlerList IOException () where
-  handlerList _ = [Handler (\(_::IOException) -> return ())]
+instance HandlerList (IOException -> IOException) IOException where
+  handlerList f = [Handler (\(e::IOException) -> return . f $ e)]
 
 instance HandlerList (IOException, HttpException) Text where
   handlerList _ = [ Handler (\(e::IOException) -> return . T.pack . show $ e)
@@ -70,11 +122,14 @@ instance HandlerList (IOException, HttpException) Text where
 -- to EitherT. Does it make sense to define it also for ListT?
 -- But then [] would mean failure, wouldn't it?
 -- [()] success?
-handlerListIoUnit :: [Handler ()]
-handlerListIoUnit = handlerList ioExcept
+handlerListIoUnit :: IOExceptionHandling -> [Handler ()]
+handlerListIoUnit f = handlerList (processIOExcepts f)
 
 class Tries a b c | c -> a b where
   tries :: [Handler a] -> IO b -> IO c
+
+instance Tries a b (Identity b) where
+  tries _ io = fmap Identity io
 
 instance Tries a b (Either a b) where
   tries handlers io = fmap Right io
@@ -100,8 +155,34 @@ instance ToT Maybe MaybeT IO a where
 instance ToT (Either b) (EitherT b) IO a where
   toT = EitherT
 
+instance ToT Identity IdentityT IO a where
+  toT = IdentityT . fmap runIdentity
+
 class IOT t m a where
   ioT :: m a -> t m a
+
+evalTHStr :: String -> Q Exp
+evalTHStr = return . either (\_ -> error "Error in template haskell") id
+                   . parseExp
+
+deriveSystemDirectoryErrors :: String -> Name -> DecsQ
+deriveSystemDirectoryErrors ioh tp = let
+  nm = conT tp
+  iohv = evalTHStr ioh
+  in [d|
+        instance IOT $nm IO a where
+          ioT iof = toT $ tries (handlerList (processIOExcepts $iohv)) iof
+        |]
+
+deriveSystemDirectoryErrorsUnit :: String -> Name -> DecsQ
+deriveSystemDirectoryErrorsUnit ioh tp = let
+  nm = conT tp
+  iohv = evalTHStr ioh
+  in [d|
+        instance IOT $nm IO a where
+          ioT iof = toT $ tries (handlerListIoUnit $iohv) iof
+        |]
+
 
 -- | System.Directory as a Class.
 -- Instances for MaybeT and EitherT (String|Text|IOException|())
@@ -134,13 +215,11 @@ class SystemDirectory e where
   getModificationTime         :: FilePath -> e IO UTCTime
 
 
+
 deriveSystemDirectory :: Name -> DecsQ
 deriveSystemDirectory tp = let
     nm = conT tp
   in [d|
-
-    instance IOT $nm IO a where
-      ioT iof = toT $ tries (handlerList ioExcept) iof
 
     instance SystemDirectory $nm where
       createDirectory            = ioT .  D.createDirectory
@@ -174,9 +253,6 @@ deriveSystemDirectoryUnit :: Name -> DecsQ
 deriveSystemDirectoryUnit tp = let
     nm = conT tp
   in [d|
-    instance IOT $nm IO a where
-      ioT iof = toT $ tries handlerListIoUnit iof
-
 
     instance SystemDirectory $nm where
       createDirectory            = ioT .  D.createDirectory

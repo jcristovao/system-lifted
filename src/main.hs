@@ -1,34 +1,41 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE OverlappingInstances   #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# OPTIONS_GHC -fno-warn-orphans   #-}
 
 import System.Directory.Either
 
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Maybe
 
-type EitherString = EitherT String
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import GHC.IO.Exception
 
+type EitherString = EitherT String
+type EitherText   = EitherT Text
+
+deriveSystemDirectoryErrorsUnit "DisallowIOE [HardwareFault]" ''MaybeT
+deriveSystemDirectoryErrors "AllIOE" ''EitherString
 deriveSystemDirectoryUnit ''MaybeT
 deriveSystemDirectory ''EitherString
-{-deriveSystemDirectory [''EitherTStr ]-}
-{-deriveSystemDirectory (EitherT String)-}
 
 main :: IO ()
 main = do
   m <- runMaybeT $ createDirectory "abc"
-  r <- runEitherT $ createDirectory "cde"
+  r <- runEitherT $ bimapEitherT T.pack id $ createDirectory "cde"
   print m
   case r of
-    Left s -> putStrLn s
-    Right _ -> print "OK"
-  print "end"
+    Left s -> T.putStrLn s
+    Right _ -> putStrLn "OK"
+  putStrLn "end"
 
 {-tries :: [Handler a] -> IO b -> IO (Either a b)-}
 {-tries handlers io = fmap Right io `catch` catchesHandler handlers-}
