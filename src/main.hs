@@ -22,9 +22,9 @@ import GHC.IO.Exception
 type EitherString = EitherT String
 type EitherText   = EitherT Text
 
-deriveSystemDirectoryErrorsUnit "DisallowIOE [HardwareFault]" ''MaybeT
+deriveSystemDirectoryErrors "DisallowIOE [HardwareFault]" ''MaybeT
 deriveSystemDirectoryErrors "AllIOE" ''EitherString
-deriveSystemDirectoryUnit ''MaybeT
+deriveSystemDirectory ''MaybeT
 deriveSystemDirectory ''EitherString
 
 main :: IO ()
@@ -39,5 +39,4 @@ main = do
 
 {-tries :: [Handler a] -> IO b -> IO (Either a b)-}
 {-tries handlers io = fmap Right io `catch` catchesHandler handlers-}
-
 

@@ -18,7 +18,6 @@ module System.Directory.Either (
   , deriveSystemDirectoryErrors
   , deriveSystemDirectoryErrorsUnit
   , IOExceptionHandling (..)
-  , xpto
 ) where
 
 import Data.Text (Text)
@@ -132,7 +131,7 @@ instance Tries a b (Either a b) where
   tries handlers io = fmap Right io
               `catch` catchesHandler handlers
 
-instance Tries a b (Maybe b) where
+instance Tries () b (Maybe b) where
   tries handlers io = fmap Just io
              `catch` (fmap eitherToMaybe . catchesHandler handlers)
 
@@ -171,17 +170,7 @@ deriveSystemDirectoryErrors ioh tp = let
           ioT iof = toT $ tries (handlerList (processIOExcepts $iohv)) iof
         |]
 
-deriveSystemDirectoryErrorsUnit :: String -> Name -> DecsQ
-deriveSystemDirectoryErrorsUnit ioh tp = let
-  nm = conT tp
-  iohv = evalTHStr ioh
-  in [d|
-        instance IOT $nm IO a where
-          ioT iof = toT $ tries (handlerListIoUnit $iohv) iof
-        |]
-
 -- | TODO: instead of deriving, we should have 'run width'.
--- | TODO2: Could polykinds solve the two declarations problem?
 
 -- | System.Directory as a Class.
 -- Instances for MaybeT and EitherT (String|Text|IOException|())
@@ -217,39 +206,6 @@ class SystemDirectory e where
 
 deriveSystemDirectory :: Name -> DecsQ
 deriveSystemDirectory tp = let
-    nm = conT tp
-  in [d|
-
-    instance SystemDirectory $nm where
-      createDirectory            = ioT .  D.createDirectory
-      createDirectoryIfMissing   = ioT .: D.createDirectoryIfMissing
-      removeDirectory            = ioT .  D.removeDirectory
-      removeDirectoryRecursive   = ioT .  D.removeDirectoryRecursive
-      renameDirectory orig       = ioT .  D.renameDirectory orig
-      getDirectoryContents       = ioT .  D.getDirectoryContents
-      getCurrentDirectory        = ioT    D.getCurrentDirectory
-      setCurrentDirectory        = ioT .  D.setCurrentDirectory
-      getHomeDirectory           = ioT    D.getHomeDirectory
-      getAppUserDataDirectory    = ioT .  D.getAppUserDataDirectory
-      getUserDocumentsDirectory  = ioT    D.getUserDocumentsDirectory
-      getTemporaryDirectory      = ioT    D.getTemporaryDirectory
-      removeFile                 = ioT .  D.removeFile
-      renameFile                 = ioT .: D.renameFile
-      copyFile                   = ioT .: D.copyFile
-      canonicalizePath           = ioT .  D.canonicalizePath
-      makeRelativeToCurrentDirectory = ioT . D.makeRelativeToCurrentDirectory
-      findExecutable             = ioT .  D.findExecutable
-      findFile                   = ioT .: D.findFile
-      doesFileExist              = ioT .  D.doesFileExist
-      doesDirectoryExist         = ioT .  D.doesDirectoryExist
-      getPermissions             = ioT .  D.getPermissions
-      setPermissions             = ioT .: D.setPermissions
-      copyPermissions            = ioT .: D.copyPermissions
-      getModificationTime        = ioT .  D.getModificationTime
-  |]
-
-deriveSystemDirectoryUnit :: Name -> DecsQ
-deriveSystemDirectoryUnit tp = let
     nm = conT tp
   in [d|
 
