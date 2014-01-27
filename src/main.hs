@@ -9,7 +9,8 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# OPTIONS_GHC -fno-warn-orphans   #-}
 
-import System.Directory.Either
+import System.Directory.Lifted
+import qualified System.Directory as D
 
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Maybe
@@ -30,11 +31,21 @@ deriveSystemDirectory ''EitherString
 main :: IO ()
 main = do
   m <- runMaybeT $ createDirectory "abc"
-  r <- runEitherT $ bimapEitherT T.pack id $ createDirectory "cde"
+  r <- runEitherT $ bimapEitherT T.pack id $ do
+    createDirectory "cde"
+    createDirectory "cdd"
   print m
   case r of
     Left s -> T.putStrLn s
     Right _ -> putStrLn "OK"
+
+  j <- runEitherT $ ioFilterT (DisallowIOE [HardwareFault]) $ do
+    D.createDirectory "ajj"
+    D.createDirectory "aji"
+  case j of
+    Left s -> Prelude.putStrLn s
+    Right _ -> putStrLn "OK!"
+  print j
   putStrLn "end"
 
 {-tries :: [Handler a] -> IO b -> IO (Either a b)-}

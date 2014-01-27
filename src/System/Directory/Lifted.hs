@@ -9,14 +9,14 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE QuasiQuotes #-}
-module System.Directory.Either (
+
+module System.Directory.Lifted (
     HandlerList (..)
   , SystemDirectory (..)
   , Permissions (..)
+  , IOT (..)
   , deriveSystemDirectory
-  , deriveSystemDirectoryUnit
   , deriveSystemDirectoryErrors
-  , deriveSystemDirectoryErrorsUnit
   , IOExceptionHandling (..)
 ) where
 
@@ -156,11 +156,14 @@ instance ToT Identity IdentityT IO a where
 
 class IOT t m a where
   ioT :: m a -> t m a
+  ioFilterT :: IOExceptionHandling -> m a -> t m a
 
 evalTHStr :: String -> Q Exp
 evalTHStr = return . either (\_ -> error "Error in template haskell") id
                    . parseExp
 
+-- | The io handlers is passed as string due to TH peculiarities (and
+-- my lack of TH knoledge, mainly).
 deriveSystemDirectoryErrors :: String -> Name -> DecsQ
 deriveSystemDirectoryErrors ioh tp = let
   nm = conT tp
@@ -168,9 +171,11 @@ deriveSystemDirectoryErrors ioh tp = let
   in [d|
         instance IOT $nm IO a where
           ioT iof = toT $ tries (handlerList (processIOExcepts $iohv)) iof
+          ioFilterT ioeh iof = toT $ tries (handlerList (processIOExcepts ioeh)) iof
         |]
 
 -- | TODO: instead of deriving, we should have 'run width'.
+
 
 -- | System.Directory as a Class.
 -- Instances for MaybeT and EitherT (String|Text|IOException|())
