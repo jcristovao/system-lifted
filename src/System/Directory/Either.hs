@@ -73,9 +73,6 @@ instance Show IOExceptionHandling where
   show AllIOE          = "AllIOE"
 
 
-xpto :: IOExceptionHandling
-xpto = DisallowIOE [AlreadyExists]
-
 processIOExcepts :: IOExceptionHandling -> IOException -> IOException
 processIOExcepts ioeh ioe =
   case ioeh of
@@ -183,6 +180,8 @@ deriveSystemDirectoryErrorsUnit ioh tp = let
           ioT iof = toT $ tries (handlerListIoUnit $iohv) iof
         |]
 
+-- | TODO: instead of deriving, we should have 'run width'.
+-- | TODO2: Could polykinds solve the two declarations problem?
 
 -- | System.Directory as a Class.
 -- Instances for MaybeT and EitherT (String|Text|IOException|())
