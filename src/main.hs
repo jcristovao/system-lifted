@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# OPTIONS_GHC -fno-warn-orphans   #-}
 
+import System.Lifted
 import System.Directory.Lifted
 import qualified System.Directory as D
 
@@ -23,8 +24,8 @@ import GHC.IO.Exception
 type EitherString = EitherT String
 type EitherText   = EitherT Text
 
-deriveSystemDirectoryErrors "DisallowIOE [HardwareFault]" ''MaybeT
-deriveSystemDirectoryErrors "AllIOE" ''EitherString
+deriveSystemLiftedErrors "DisallowIOE [HardwareFault]" ''MaybeT
+deriveSystemLiftedErrors "AllIOE" ''EitherString
 deriveSystemDirectory ''MaybeT
 deriveSystemDirectory ''EitherString
 

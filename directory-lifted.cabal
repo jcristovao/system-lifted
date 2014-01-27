@@ -1,4 +1,4 @@
-name:                system-directory-lifted
+name:                directory-lifted
 version:             0.1.0.0
 -- description:         
 license:             BSD3
@@ -18,7 +18,9 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules:     System.Directory.Lifted
+  exposed-modules:    System.Lifted
+                      System.Directory.Lifted
+                      System.Environment.Lifted
   
   -- Modules included in this library but not exported.
   -- other-modules:       
