@@ -24,11 +24,19 @@ module System.Lifted (
   , joinEitherET
   , joinEET
   , errorTtoEitherT
+  , evalEither
+  , evalEitherT
+  , reportEither
+  , reportEitherT
+  , showStr
 ) where
 
+import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Typeable
 
+import Data.Functor.Identity
 import Control.Monad (join)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Identity
@@ -36,11 +44,10 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Error
 
-import Data.Functor.Identity
 
-import Data.Typeable
 import GHC.IO.Exception
 import System.IO.Error
+import System.Exit
 import Control.Exception
 
 import Language.Haskell.TH
@@ -196,3 +203,33 @@ joinMaybeErrT e mbt = do
 
 errorTtoEitherT :: ErrorT a IO b -> EitherT a IO b
 errorTtoEitherT = EitherT . runErrorT
+
+-- | Evaluate an @Either IOException a@ to either raise the exception
+-- or return the right value
+evalEither :: Either IOException a -> IO a
+evalEither ei = case ei of
+    Left e  -> throwIO e
+    Right p -> return p
+
+-- | Evaluate an @EitherT IOException IO a@ to either raise the exception
+-- or return the right value
+evalEitherT :: EitherT IOException IO a -> IO a
+evalEitherT eit = runEitherT eit >>= evalEither
+
+-- | Show a string like value (@String@ or @Text@) without the annoying quotes
+showStr :: (IsString s, Show s) => s -> String
+showStr = Prelude.init . Prelude.tail . show
+
+-- | Either return the right value or print the error message in the @Left@ value
+-- and exit
+reportEither :: (IsString e, Show e) => Either e a -> IO a
+reportEither ei = case ei of
+  Left  e -> (putStrLn . showStr $ e) >> exitFailure
+  Right p -> return p
+
+-- | Either return the right value or print the error message in the @Left@ value
+-- and exit
+reportEitherT :: (IsString e, Show e) => EitherT e IO a -> IO a
+reportEitherT eit = runEitherT eit >>= reportEither
+
+
