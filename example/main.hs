@@ -15,14 +15,13 @@ import qualified System.Directory as D
 
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Maybe
+import Control.Applicative
 
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import GHC.IO.Exception
 
 type EitherString = EitherT String
-type EitherText   = EitherT Text
 
 deriveSystemLiftedErrors "DisallowIOE [HardwareFault]" ''MaybeT
 deriveSystemLiftedErrors "AllIOE" ''EitherString
@@ -47,8 +46,11 @@ main = do
     Left s -> Prelude.putStrLn s
     Right _ -> putStrLn "OK!"
   print j
+
+  x <- runMaybeT $ joinMaybeMT (findFile ["."] "LICENSE")
+                <|> getHomeDirectory
+  print x
+
   putStrLn "end"
 
-{-tries :: [Handler a] -> IO b -> IO (Either a b)-}
-{-tries handlers io = fmap Right io `catch` catchesHandler handlers-}
 

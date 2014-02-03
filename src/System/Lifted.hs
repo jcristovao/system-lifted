@@ -15,14 +15,26 @@ module System.Lifted (
   , IOT (..)
   , deriveSystemLiftedErrors
   , IOExceptionHandling (..)
+  , joinMaybeMT
+  , joinMMT
+  , joinMaybeET
+  , joinMET
+  , joinMaybeErrT
+  , joinMErrT
+  , joinEitherET
+  , joinEET
+  , errorTtoEitherT
 ) where
 
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Control.Monad.Trans.Either
-import Control.Monad.Trans.Maybe
+import Control.Monad (join)
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Identity
+import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Either
+import Control.Monad.Trans.Error
 
 import Data.Functor.Identity
 
@@ -123,7 +135,7 @@ catchesHandler handlers e = foldr tryHandler (throw e) handlers
               Just e' -> fmap Left (handler e')
               Nothing -> res
 
-class ToT n t m a | n -> t, t -> n where
+class ToT n t m a | t -> n where
   toT :: m (n a) -> t m a
 
 instance ToT Maybe MaybeT IO a where
@@ -134,6 +146,9 @@ instance ToT (Either b) (EitherT b) IO a where
 
 instance ToT Identity IdentityT IO a where
   toT = IdentityT . fmap runIdentity
+
+instance ToT (Either b) (ErrorT b) IO a where
+  toT = ErrorT
 
 class IOT t m a where
   ioT :: m a -> t m a
@@ -155,7 +170,29 @@ deriveSystemLiftedErrors ioh tp = let
           ioFilterT ioeh iof = toT $ tries (handlerList (processIOExcepts ioeh)) iof
         |]
 
--- | TODO: instead of deriving, we should have 'run width'.
+joinMaybeMT, joinMMT :: MaybeT IO (Maybe a) -> MaybeT IO a
+joinMMT = joinMaybeMT
+joinMaybeMT mbt = do
+  mb <- liftIO $ runMaybeT mbt
+  MaybeT . return $ maybe Nothing (maybe Nothing Just) mb
 
 
+joinMaybeET, joinMET :: b -> EitherT b IO (Maybe a) -> EitherT b IO a
+joinMET = joinMaybeET
+joinMaybeET e mbt = do
+  mb <- liftIO $ runEitherT mbt
+  hoistEither $ either Left (maybe (Left e) Right) mb
 
+joinEitherET, joinEET :: EitherT b IO (Either b a) -> EitherT b IO a
+joinEET = joinEitherET
+joinEitherET eit = hoistEither . join =<< (liftIO . runEitherT $ eit)
+
+joinMaybeErrT, joinMErrT :: (Error b)
+  => b -> ErrorT b IO (Maybe a) -> ErrorT b IO a
+joinMErrT = joinMaybeErrT
+joinMaybeErrT e mbt = do
+  mb <- liftIO $ runErrorT mbt
+  ErrorT . return $ either Left (maybe (Left e) Right) mb
+
+errorTtoEitherT :: ErrorT a IO b -> EitherT a IO b
+errorTtoEitherT = EitherT . runErrorT
