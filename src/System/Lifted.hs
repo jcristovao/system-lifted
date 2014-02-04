@@ -29,6 +29,7 @@ module System.Lifted (
   , reportEither
   , reportEitherT
   , showStr
+  , tshow
 ) where
 
 import Data.String
@@ -219,6 +220,10 @@ evalEitherT eit = runEitherT eit >>= evalEither
 -- | Show a string like value (@String@ or @Text@) without the annoying quotes
 showStr :: (IsString s, Show s) => s -> String
 showStr = Prelude.init . Prelude.tail . show
+
+-- | Show as text
+tshow :: (Show s) => s -> Text
+tshow = T.pack . show
 
 -- | Either return the right value or print the error message in the @Left@ value
 -- and exit
