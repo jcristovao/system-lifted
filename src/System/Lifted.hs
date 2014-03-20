@@ -28,8 +28,8 @@ module System.Lifted (
   , evalEitherT
   , reportEither
   , reportEitherT
-  , showStr
-  , tshow
+  {-, showStr-}
+  {-, tshow-}
 ) where
 
 import Data.String
