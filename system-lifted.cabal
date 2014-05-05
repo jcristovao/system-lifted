@@ -1,5 +1,5 @@
 name:                system-lifted
-version:             0.2.0.0
+version:             0.2.0.1
 synopsis:            Lifted versions of System functions.
 description:         Lifted versions of functions provided in System.Directory,
                      System.Environment and others.
