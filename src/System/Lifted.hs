@@ -119,13 +119,13 @@ instance HandlerList (IOException -> IOException) IOException where
 -- to EitherT. Does it make sense to define it also for ListT?
 -- But then [] would mean failure, wouldn't it?
 -- [()] success?
-handlerListIoUnit :: IOExceptionHandling -> [Handler ()]
-handlerListIoUnit f = handlerList (processIOExcepts f)
+{-handlerListIoUnit :: IOExceptionHandling -> [Handler ()]-}
+{-handlerListIoUnit f = handlerList (processIOExcepts f)-}
 
 class Tries a b c | c -> a b where
   tries :: [Handler a] -> IO b -> IO c
 
-instance Tries a b (Identity b) where
+instance Tries () b (Identity b) where
   tries _ io = fmap Identity io
 
 instance Tries a b (Either a b) where
@@ -222,8 +222,8 @@ showStr :: (IsString s, Show s) => s -> String
 showStr = Prelude.init . Prelude.tail . show
 
 -- | Show as text
-tshow :: (Show s) => s -> Text
-tshow = T.pack . show
+{-tshow :: (Show s) => s -> Text-}
+{-tshow = T.pack . show-}
 
 -- | Either return the right value or print the error message in the @Left@ value
 -- and exit
